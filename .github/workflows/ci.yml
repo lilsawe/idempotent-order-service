@@ -25,10 +25,13 @@ jobs:
 
       - name: Boot the app and run smoke test
         run: |
-          java -jar target/order-reliability-kit-0.1.0.jar &
+          java -jar example/target/example-0.2.0.jar &
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health || true)
             if [ "$code" = "200" ]; then break; fi
             sleep 2
           done
           bash scripts/smoke.sh
+
+      - name: Verify the library can be installed and consumed
+        run: mvn -B -ntp install -DskipTests

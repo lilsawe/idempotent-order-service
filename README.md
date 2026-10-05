@@ -5,7 +5,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A compact, production-shaped Spring Boot service for **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 21 tests + CI.
+> A compact, production-shaped Spring Boot service for **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 36 tests + CI.
 
 一个用 Spring Boot 写的**订单服务实践项目**，聚焦后端工程里最容易出事故的三件事：**接口幂等**、**状态流转**、**对账**。
 
@@ -19,6 +19,57 @@
 
 这个项目把这三件事各做成一个可独立测试的模块。
 
+## 模块结构：一个库 + 一个示例
+
+| 模块 | 是什么 | 测试 | 行覆盖率 |
+|---|---|---|---|
+| **kit** | **可复用组件**（框架无关）：幂等存储抽象 + 自动装配、通用状态机、通用双向对账引擎 | 15 | 86.5% |
+| **example** | **示例服务**：用 kit 实现订单的下单幂等 / 状态流转 / 对账，带 Swagger、压测脚本与冒烟脚本 | 21 | 92.8% |
+
+> 为什么拆两个模块？**「能跑」和「能被复用」是两种能力**。业务代码写三遍会用，抽象成组件才是工程能力——
+> 所以幂等、状态机、对账的通用部分抽进 §kit§，订单相关的部分留在 §example§。
+
+## 作为库使用（kit）
+
+§§§bash
+mvn -B -ntp install -DskipTests     # 或 make install
+§§§
+
+§§§xml
+<dependency>
+    <groupId>com.lilsawe</groupId>
+    <artifactId>kit</artifactId>
+    <version>0.2.0</version>
+</dependency>
+§§§
+
+引入依赖后**自动装配生效**，不需要在业务侧手写 @Bean：
+
+§§§java
+// 1) 通用状态机：只声明转移表，业务侧不再写 if-else
+StateMachine<OrderStatus, OrderEvent> machine = StateMachine.<OrderStatus, OrderEvent>builder()
+        .on(CREATED, PAY, PAID)
+        .on(PAID, SHIP, SHIPPED)
+        .terminal(SHIPPED)
+        .build();
+machine.next(CREATED, PAY);                   // PAID
+machine.assertCanTransit(CREATED, SHIPPED);   // 抛 IllegalStateException
+
+// 2) 通用双向对账：给「取键 + 取金额」两个函数，可比对任意两张表
+ReconcileReport report = Reconciler.compare(
+        localOrders, channelSettlements,
+        OrderEntity::getOrderNo, OrderEntity::getAmountCent,
+        ChannelOrder::channelOrderNo, ChannelOrder::amountCent);
+report.diffs();   // 一致 / 左侧多 / 右侧多 / 金额不一致
+
+// 3) 幂等存储：默认内存实现，一行配置切 Redis
+@Autowired IdempotencyStore store;
+§§§
+
+| 配置 | 效果 |
+|---|---|
+| §kit.idempotency.store: memory§（默认） | 内存实现：单实例 / 本地开发 / 测试，零依赖 |
+| §kit.idempotency.store: redis§ | Redis 实现：多实例生产，SETNX + 24h TTL |
 ## 核心设计
 
 ### 1. 接口幂等：三层防线
@@ -185,7 +236,7 @@ sequenceDiagram
 
 ```bash
 # 终端 1：启动服务（H2 内存库，零依赖）
-mvn spring-boot:run
+mvn -B -ntp -pl example -am spring-boot:run
 
 # 终端 2：跑压测（Node 18+，无第三方依赖）
 CONCURRENCY=200 REQUESTS=2000 node benchmark/load-test.mjs
@@ -232,14 +283,13 @@ java.lang.IllegalStateException: 幂等键 CONCURRENT-KEY-1 已占用，但订�
 
 | 指标 | 数值 |
 |---|---|
-| 测试数量 | **21 个**（状态机 5 · 幂等单测 5 · 对账 2 · HTTP 契约 7 · 端到端 1 · 并发 1） |
-| 行覆盖率（JaCoCo） | **84.6%** |
-| 分支覆盖率 | **87.0%** |
-| 指令覆盖率 | **89.0%** |
+| 测试数量 | **36 个**（kit 15：状态机 5 · 对账引擎 3 · Redis 幂等 4 · 自动装配 3；example 21：状态机 5 · 幂等单测 5 · 对账 2 · HTTP 契约 7 · 端到端 1 · 并发 1） |
+| 行覆盖率（JaCoCo） | **90.2%** 合计（kit 86.5% / example 92.8%） |
+| 分支覆盖率 | kit 67.6% / example 84.8% |
 
 ```bash
 mvn -B -ntp verify                    # 跑测试 + 生成覆盖率报告
-open target/site/jacoco/index.html    # 查看报告
+open example/target/site/jacoco/index.html   # 查看报告
 ```
 ## 面试考点（把项目讲成答案）
 

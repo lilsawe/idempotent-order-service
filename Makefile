@@ -1,14 +1,14 @@
 SHELL := /bin/bash
-.PHONY: help run test verify coverage bench smoke docker-up docker-down clean
+.PHONY: help run run-mysql test verify coverage bench smoke docker-up docker-down install clean
 
 help:  ## 显示所有可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-run:  ## 本地启动（H2 内存库，零依赖）
-	mvn spring-boot:run
+run:  ## 本地启动示例服务（H2 内存库，零依赖）
+	mvn -B -ntp -pl example -am spring-boot:run
 
 run-mysql:  ## 用 MySQL + Redis 启动（需先 make docker-up）
-	mvn spring-boot:run -Dspring-boot.run.profiles=mysql,redis
+	mvn -B -ntp -pl example -am spring-boot:run -Dspring-boot.run.profiles=mysql,redis
 
 test:  ## 跑测试
 	mvn -B -ntp test
@@ -16,8 +16,8 @@ test:  ## 跑测试
 verify:  ## 跑测试 + 覆盖率报告
 	mvn -B -ntp verify
 
-coverage: verify  ## 生成并打开覆盖率报告
-	open target/site/jacoco/index.html
+coverage: verify  ## 生成并打开覆盖率报告（含 kit 与 example）
+	open example/target/site/jacoco/index.html
 
 bench:  ## 压测（需先 make run）
 	node benchmark/load-test.mjs
@@ -30,6 +30,9 @@ docker-up:  ## 启动 MySQL + Redis
 
 docker-down:  ## 停止 MySQL + Redis
 	docker compose down
+
+install:  ## 把 kit 安装到本地 Maven 仓库（供其它项目依赖）
+	mvn -B -ntp install -DskipTests
 
 clean:  ## 清理构建产物
 	mvn -B -ntp clean
