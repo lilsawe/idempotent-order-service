@@ -5,7 +5,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A minimal, production-shaped Spring Boot service demonstrating **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 13 tests + CI.
+> A minimal, production-shaped Spring Boot service demonstrating **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 21 tests + CI.
 
 一个用 Spring Boot 写的**订单服务实践项目**，聚焦后端工程里最容易出事故的三件事：**接口幂等**、**状态流转**、**对账**。
 
@@ -121,6 +121,79 @@ src/main/java/com/lilsawe/orderdemo
 - 引入 Testcontainers，在 CI 里跑真实 MySQL / Redis
 - 增加 Micrometer 指标：幂等命中率、对账差异数
 
+## 架构与并发
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as OrderController
+    participant S as OrderService
+    participant I as IdempotencyStore
+    participant D as DB (orders)
+    C->>A: POST /api/orders (Idempotency-Key: k1)
+    A->>S: create(k1, amount)
+    S->>I: find(k1)
+    alt 幂等键命中（重放）
+        I-->>S: orderNo
+        S-->>A: 返回首次创建的订单
+    else 未命中
+        S->>I: putIfAbsent(k1, orderNo)  Redis SETNX 语义
+        alt 抢到（第一个请求）
+            S->>D: INSERT order
+            D-->>S: 成功
+        else 未抢到（并发请求）
+            S->>D: 有限次回查（赢家可能尚未提交）
+            D-->>S: 赢家的订单
+        end
+    end
+    A-->>C: 201 Created + orderNo
+```
+
+## 并发与压测（真实数据，可复现）
+
+```bash
+# 终端 1：启动服务（H2 内存库，零依赖）
+mvn spring-boot:run
+
+# 终端 2：跑压测（Node 18+，无第三方依赖）
+CONCURRENCY=200 REQUESTS=2000 node benchmark/load-test.mjs
+```
+
+**测试环境**：Apple M4 / 16 GB / macOS 27.2 / Temurin JDK 17.0.20.1 / H2 内存库 / 单实例
+
+| 场景 | 请求数 / 并发 | QPS | P50 | P95 | P99 | 失败 |
+|---|---|---|---|---|---|---|
+| A. 独立幂等键下单（吞吐） | 2000 / 200 | **2460** | 62 ms | 191 ms | 229 ms | 0 |
+| B. **同一幂等键并发**（幂等压制） | 200 / 200 | 3077 | 39 ms | 59 ms | 61 ms | 0 |
+
+**场景 B 的结论**：200 个并发请求共用同一个幂等键，服务端最终**只有 1 笔订单**。压测脚本会校验「返回的不同订单号数量 == 1」，不满足则退出码非 0，可直接接进 CI。
+
+> 这是**本机单实例 + 内存数据库**的数据，用于证明「幂等在并发下真的生效」，不代表生产容量。生产需要压到 MySQL/Redis 并用多副本验证。
+
+## 踩坑记录：并发下的「读未提交」问题
+
+| 项 | 内容 |
+|---|---|
+| 现象 | 200 并发同 key 下单时，**未抢到幂等键的请求直接查库**，而赢家的事务尚未提交，查不到订单，抛 IllegalStateException |
+| 根因 | 幂等键是「先占位、后落库」，占位与提交之间存在窗口，并发请求在该窗口内查询会读不到数据 |
+| 修复 | 未抢到键的请求改为**有限次、带间隔的回查**（50 次 x 10 ms），命中即返回同一订单；超时才抛「处理中，请稍后重试」 |
+| 验证 | IdempotencyConcurrencyTest（200 线程 JUnit 测试）+ benchmark/load-test.mjs 场景 B |
+| 生产更优解 | 1) 等待 + 超时后返回 **202 Accepted**（语义更准）；2) 改为「直接 INSERT，唯一索引冲突后 SELECT」，避免轮询；3) 幂等结果写「处理中」占位并让调用方轮询查询接口 |
+
+## 测试与覆盖率
+
+| 指标 | 数值 |
+|---|---|
+| 测试数量 | **21 个**（状态机 5 · 幂等单测 5 · 对账 2 · HTTP 契约 7 · 端到端 1 · 并发 1） |
+| 行覆盖率（JaCoCo） | **84.6%** |
+| 分支覆盖率 | **87.0%** |
+| 指令覆盖率 | **89.0%** |
+
+```bash
+mvn -B -ntp verify                    # 跑测试 + 生成覆盖率报告
+open target/site/jacoco/index.html    # 查看报告
+```
 ## 面试考点（把项目讲成答案）
 
 | 问题 | 答案要点 |

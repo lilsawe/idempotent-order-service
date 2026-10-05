@@ -21,6 +21,13 @@ import java.util.Optional;
 @Service
 public class OrderService {
 
+    /** 未抢到幂等键时的最大回查次数。 */
+    private static final int MAX_RETRY = 50;
+
+    /** 回查间隔（毫秒）。 */
+    private static final long RETRY_INTERVAL_MILLIS = 10L;
+
+
     private final OrderRepository orderRepository;
     private final IdempotencyStore idempotencyStore;
     private final OrderNoGenerator orderNoGenerator;
@@ -55,10 +62,10 @@ public class OrderService {
             return existing.get();
         }
 
-        // 3) 抢占幂等键：抢不到说明并发请求已经在处理，回查返回同一订单
+        // 3) 抢占幂等键：抢不到说明并发请求已经在处理，短暂回查返回同一订单
         String orderNo = orderNoGenerator.next();
         if (!idempotencyStore.putIfAbsent(idempotencyKey, orderNo)) {
-            return loadByOrderNo(idempotencyStore.find(idempotencyKey).orElse(orderNo), idempotencyKey);
+            return awaitExistingOrder(idempotencyKey, idempotencyStore.find(idempotencyKey).orElse(orderNo));
         }
 
         // 4) 落库
@@ -76,6 +83,34 @@ public class OrderService {
         OrderEntity order = getByOrderNo(orderNo);
         order.transitionTo(next);
         return orderRepository.save(order);
+    }
+
+    /**
+     * 并发下未抢到幂等键的请求：赢家的订单可能还没提交，直接查会读不到，
+     * 因此做有限次、带间隔的回查（生产可换成等待+超时或返回 202 处理中）。
+     */
+    private OrderEntity awaitExistingOrder(String idempotencyKey, String orderNo) {
+        for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
+            Optional<OrderEntity> byOrderNo = orderRepository.findByOrderNo(orderNo);
+            if (byOrderNo.isPresent()) {
+                return byOrderNo.get();
+            }
+            Optional<OrderEntity> byKey = orderRepository.findByIdempotencyKey(idempotencyKey);
+            if (byKey.isPresent()) {
+                return byKey.get();
+            }
+            sleepQuietly();
+        }
+        throw new IllegalStateException("幂等键 " + idempotencyKey + " 正在处理中，请稍后重试");
+    }
+
+    private void sleepQuietly() {
+        try {
+            Thread.sleep(RETRY_INTERVAL_MILLIS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待幂等结果被中断", ex);
+        }
     }
 
     private OrderEntity loadByOrderNo(String orderNo, String idempotencyKey) {
