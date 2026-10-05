@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help run run-mysql test verify coverage bench smoke docker-up docker-down install clean
+.PHONY: help run run-mysql test verify coverage bench smoke docker-all docker-logs docker-up docker-down install clean
 
 help:  ## 显示所有可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -25,7 +25,13 @@ bench:  ## 压测（需先 make run）
 smoke:  ## 一键冒烟：下单 / 幂等 / 状态流转 / 对账（需先 make run）
 	bash scripts/smoke.sh
 
-docker-up:  ## 启动 MySQL + Redis
+docker-all:  ## 一条命令起全套（MySQL + Redis + 应用）
+	docker compose up --build
+
+docker-logs:  ## 查看应用容器日志
+	docker compose logs -f app
+
+docker-up:  ## 仅启动 MySQL + Redis
 	docker compose up -d
 
 docker-down:  ## 停止 MySQL + Redis

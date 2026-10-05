@@ -107,9 +107,10 @@ ReconcileService 把本地订单与渠道结算记录按订单号双向比对，
 
 | 方式 | 命令 | 适用场景 |
 |---|---|---|
-| **零依赖**（H2 内存库） | §make run§ | 想立刻看效果，不用装任何东西 |
-| **MySQL + Redis** | §make docker-up && make run-mysql§ | 想验证真实中间件（幂等键走 Redis） |
-| **打 jar 部署** | §mvn -B -ntp package && java -jar target/*.jar§ | 部署到服务器 |
+| **一条命令起全套** | §docker compose up --build§ | 想直接体验：MySQL + Redis + 应用一起起，含健康检查（CI 会构建镜像并在容器里跑冒烟） |
+| **零依赖**（H2 内存库） | §make run§ | 本地开发，不用装任何东西 |
+| **MySQL + Redis（本机跑）** | §make docker-up && make run-mysql§ | 调试真实中间件（幂等键走 Redis） |
+| **打 jar 部署** | §mvn -B -ntp package && java -jar example/target/example-0.2.0.jar§ | 部署到服务器 |
 
 启动后可以直接打开：
 
