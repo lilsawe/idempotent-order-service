@@ -7,6 +7,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,5 +65,52 @@ class StateMachineTest {
                 .on(Status.CREATED, Event.PAY, Status.PAID)
                 .build();
         assertFalse(strict.canTransit(Status.PAID, Status.PAID));
+    }
+
+
+    @Test
+    @DisplayName("target 对未登记的事件返回 null")
+    void targetReturnsNullForUnknownEvent() {
+        assertEquals(Status.PAID, machine.target(Status.CREATED, Event.PAY));
+        assertNull(machine.target(Status.CREATED, Event.SHIP));
+        assertNull(machine.target(Status.SHIPPED, Event.PAY));
+    }
+
+    @Test
+    @DisplayName("successors 返回全部后继状态；未知状态返回空集合")
+    void successorsListsAllTargets() {
+        assertEquals(Set.of(Status.PAID, Status.CANCELLED), machine.successors(Status.CREATED));
+        assertEquals(Set.of(), machine.successors(Status.CANCELLED));
+    }
+
+    @Test
+    @DisplayName("allow 可直接登记「状态 -> 状态」的转移")
+    void allowRegistersDirectTransitions() {
+        StateMachine<Status, Event> direct = StateMachine.<Status, Event>builder()
+                .allow(Status.CREATED, Status.PAID)
+                .terminal(Status.PAID)
+                .build();
+
+        assertTrue(direct.canTransit(Status.CREATED, Status.PAID));
+        assertFalse(direct.canTransit(Status.PAID, Status.CREATED));
+    }
+
+    @Test
+    @DisplayName("allowSameState(false) 时流转到同一状态被拒绝")
+    void strictMachineRejectsSameStateTransition() {
+        StateMachine<Status, Event> strict = StateMachine.<Status, Event>builder()
+                .allowSameState(false)
+                .allow(Status.CREATED, Status.PAID)
+                .build();
+
+        assertFalse(strict.canTransit(Status.PAID, Status.PAID));
+        assertThrows(IllegalStateException.class, () -> strict.assertCanTransit(Status.PAID, Status.PAID));
+    }
+
+    @Test
+    @DisplayName("canTransit 对 null 参数返回 false")
+    void canTransitHandlesNull() {
+        assertFalse(machine.canTransit(null, Status.PAID));
+        assertFalse(machine.canTransit(Status.CREATED, null));
     }
 }

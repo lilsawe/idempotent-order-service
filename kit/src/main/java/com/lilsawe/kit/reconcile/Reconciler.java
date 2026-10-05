@@ -2,7 +2,6 @@ package com.lilsawe.kit.reconcile;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,18 +78,5 @@ public final class Reconciler {
             }
         }
         return new ReconcileReport(left.size(), right.size(), matched, List.copyOf(diffs));
-    }
-
-    private static <T> Map<String, Long> index(Collection<T> items,
-                                               Function<T, String> keyFn,
-                                               ToLongFunction<T> amountFn) {
-        Map<String, Long> map = new HashMap<>();
-        if (items == null) {
-            return map;
-        }
-        for (T item : items) {
-            map.put(keyFn.apply(item), amountFn.applyAsLong(item));
-        }
-        return map;
     }
 }

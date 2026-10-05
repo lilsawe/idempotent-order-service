@@ -5,7 +5,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A compact, production-shaped Spring Boot service for **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 36 tests + CI.
+> A compact, production-shaped Spring Boot service for **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 48 tests + CI.
 
 一个用 Spring Boot 写的**订单服务实践项目**，聚焦后端工程里最容易出事故的三件事：**接口幂等**、**状态流转**、**对账**。
 
@@ -23,7 +23,7 @@
 
 | 模块 | 是什么 | 测试 | 行覆盖率 |
 |---|---|---|---|
-| **kit** | **可复用组件**（框架无关）：幂等存储抽象 + 自动装配、通用状态机、通用双向对账引擎 | 15 | 86.5% |
+| **kit** | **可复用组件**（框架无关）：幂等存储抽象 + 自动装配、通用状态机、通用双向对账引擎 | 27 | **99.0%** |
 | **example** | **示例服务**：用 kit 实现订单的下单幂等 / 状态流转 / 对账，带 Swagger、压测脚本与冒烟脚本 | 21 | 92.8% |
 
 > 为什么拆两个模块？**「能跑」和「能被复用」是两种能力**。业务代码写三遍会用，抽象成组件才是工程能力——
@@ -283,9 +283,9 @@ java.lang.IllegalStateException: 幂等键 CONCURRENT-KEY-1 已占用，但订�
 
 | 指标 | 数值 |
 |---|---|
-| 测试数量 | **36 个**（kit 15：状态机 5 · 对账引擎 3 · Redis 幂等 4 · 自动装配 3；example 21：状态机 5 · 幂等单测 5 · 对账 2 · HTTP 契约 7 · 端到端 1 · 并发 1） |
-| 行覆盖率（JaCoCo） | **90.2%** 合计（kit 86.5% / example 92.8%） |
-| 分支覆盖率 | kit 67.6% / example 84.8% |
+| 测试数量 | **48 个**（kit 27：状态机 10 · 对账引擎 6 · 内存幂等 4 · Redis 幂等 4 · 自动装配 3；example 21：状态机 5 · 幂等单测 5 · 对账 2 · HTTP 契约 7 · 端到端 1 · 并发 1） |
+| 行覆盖率（JaCoCo） | **95.2%** 合计（kit 99.0% / example 92.8%） |
+| 分支覆盖率 | kit 96.7% / example 84.8% |
 
 ```bash
 mvn -B -ntp verify                    # 跑测试 + 生成覆盖率报告

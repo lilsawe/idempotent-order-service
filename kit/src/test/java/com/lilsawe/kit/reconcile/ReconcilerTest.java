@@ -70,4 +70,55 @@ class ReconcilerTest {
         ReconcileReport indexed = Reconciler.compareIndexed(Map.of("A", 1L), Map.of("A", 2L));
         assertFalse(indexed.balanced());
     }
+
+
+    @Test
+    @DisplayName("null 与空集合都能安全处理")
+    void handlesNullAndEmptyCollections() {
+        ReconcileReport empty = Reconciler.compare(
+                List.of(), List.of(),
+                LocalOrder::orderNo, LocalOrder::amountCent,
+                ChannelSettlement::orderNo, ChannelSettlement::amountCent);
+
+        assertEquals(0, empty.leftCount());
+        assertEquals(0, empty.rightCount());
+        assertTrue(empty.balanced());
+
+        ReconcileReport withNull = Reconciler.compare(
+                null, null,
+                LocalOrder::orderNo, LocalOrder::amountCent,
+                ChannelSettlement::orderNo, ChannelSettlement::amountCent);
+
+        assertTrue(withNull.balanced());
+
+        assertTrue(Reconciler.compareIndexed(Map.of(), Map.of()).balanced());
+    }
+
+    @Test
+    @DisplayName("重复业务键以最后一条为准")
+    void duplicateKeysKeepLastValue() {
+        ReconcileReport report = Reconciler.compare(
+                List.of(new LocalOrder("A", 100), new LocalOrder("A", 200)),
+                List.of(new ChannelSettlement("A", 200)),
+                LocalOrder::orderNo, LocalOrder::amountCent,
+                ChannelSettlement::orderNo, ChannelSettlement::amountCent);
+
+        assertEquals(1, report.leftCount());
+        assertTrue(report.balanced(), "去重后应以最后一条为准");
+    }
+
+    @Test
+    @DisplayName("差异明细保留两侧金额，便于定位")
+    void diffCarriesBothAmounts() {
+        ReconcileReport report = Reconciler.compare(
+                List.of(new LocalOrder("A", 100)),
+                List.of(new ChannelSettlement("A", 150)),
+                LocalOrder::orderNo, LocalOrder::amountCent,
+                ChannelSettlement::orderNo, ChannelSettlement::amountCent);
+
+        ReconcileDiff diff = report.diffs().get(0);
+        assertEquals(DiffType.AMOUNT_MISMATCH, diff.type());
+        assertEquals(100L, diff.leftAmount());
+        assertEquals(150L, diff.rightAmount());
+    }
 }
