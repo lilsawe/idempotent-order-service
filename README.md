@@ -1,6 +1,6 @@
-# idempotent-order-service
+# order-reliability-kit
 
-[![Java CI](https://github.com/lilsawe/idempotent-order-service/actions/workflows/ci.yml/badge.svg)](https://github.com/lilsawe/idempotent-order-service/actions/workflows/ci.yml)
+[![Java CI](https://github.com/lilsawe/order-reliability-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/lilsawe/order-reliability-kit/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

@@ -12,9 +12,9 @@
     </parent>
 
     <groupId>com.lilsawe</groupId>
-    <artifactId>idempotent-order-service</artifactId>
+    <artifactId>order-reliability-kit</artifactId>
     <version>0.1.0</version>
-    <name>idempotent-order-service</name>
+    <name>order-reliability-kit</name>
     <description>Spring Boot 订单服务实践：接口幂等、状态机与对账</description>
 
     <properties>

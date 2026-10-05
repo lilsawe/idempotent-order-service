@@ -25,7 +25,7 @@ jobs:
 
       - name: Boot the app and run smoke test
         run: |
-          java -jar target/idempotent-order-service-0.1.0.jar &
+          java -jar target/order-reliability-kit-0.1.0.jar &
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health || true)
             if [ "$code" = "200" ]; then break; fi

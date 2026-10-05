@@ -14,7 +14,7 @@ import java.util.List;
 @Component
 public class SimulatedChannelGateway implements ChannelGateway {
 
-    private static final long DEMO_EXTRA_AMOUNT_CENT = 8888L;
+    private static final long EXTRA_SETTLEMENT_AMOUNT_CENT = 8888L;
 
     private final OrderRepository orderRepository;
 
@@ -31,7 +31,7 @@ public class SimulatedChannelGateway implements ChannelGateway {
             long amount = (i == 0) ? Math.max(0L, order.getAmountCent() - 100L) : order.getAmountCent();
             settlements.add(new ChannelOrder(order.getOrderNo(), amount));
         }
-        settlements.add(new ChannelOrder("CH-ONLY-0001", DEMO_EXTRA_AMOUNT_CENT));
+        settlements.add(new ChannelOrder("CH-ONLY-0001", EXTRA_SETTLEMENT_AMOUNT_CENT));
         return settlements;
     }
 }
