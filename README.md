@@ -52,25 +52,6 @@ ReconcileService 把本地订单与渠道结算记录按订单号双向比对，
 | MISSING_IN_LOCAL | 渠道有、本地无 —— 可能漏记或重复扣款 |
 | AMOUNT_MISMATCH | 两侧都有但金额不一致 |
 
-## 快速开始
-
-### 方式一：H2 内存库直接跑（零依赖）
-
-```bash
-mvn spring-boot:run
-```
-
-启动后访问 http://localhost:8080 ，H2 控制台在 /h2-console （JDBC URL：jdbc:h2:mem:orders）。
-
-### 方式二：MySQL + Redis（Docker）
-
-```bash
-docker compose up -d
-mvn spring-boot:run -Dspring-boot.run.profiles=mysql,redis
-```
-
-redis profile 会把幂等键存储从内存切换成 Redis。
-
 ## 快速开始（三种方式，按需选）
 
 | 方式 | 命令 | 适用场景 |
