@@ -71,6 +71,56 @@ mvn spring-boot:run -Dspring-boot.run.profiles=mysql,redis
 
 redis profile 会把幂等键存储从内存切换成 Redis。
 
+## 快速开始（三种方式，按需选）
+
+| 方式 | 命令 | 适用场景 |
+|---|---|---|
+| **零依赖**（H2 内存库） | §make run§ | 想立刻看效果，不用装任何东西 |
+| **MySQL + Redis** | §make docker-up && make run-mysql§ | 想验证真实中间件（幂等键走 Redis） |
+| **打 jar 部署** | §mvn -B -ntp package && java -jar target/*.jar§ | 部署到服务器 |
+
+启动后可以直接打开：
+
+| 地址 | 用途 |
+|---|---|
+| **http://localhost:8080/swagger-ui.html** | ⭐ **Swagger UI —— 浏览器里直接试接口**，不用写 curl |
+| http://localhost:8080/actuator/health | 健康检查（UP/DOWN + 各组件状态） |
+| http://localhost:8080/actuator/prometheus | Prometheus 指标（QPS/延迟/错误率） |
+| http://localhost:8080/h2-console | H2 控制台（JDBC URL: jdbc:h2:mem:orders） |
+
+## Makefile 命令
+
+§§§bash
+make help        # 列出所有命令
+make run         # 本地启动（H2，零依赖）
+make run-mysql   # 用 MySQL + Redis 启动
+make test        # 跑测试
+make coverage    # 测试 + 覆盖率报告（自动打开）
+make smoke       # 一键冒烟：幂等/状态机/对账（需先 make run）
+make bench       # 压测（需先 make run）
+make docker-up   # 启动 MySQL + Redis
+make clean       # 清理构建产物
+§§§
+
+## 一键冒烟（12 项检查）
+
+§§§bash
+make run            # 终端 1
+make smoke          # 终端 2
+§§§
+
+冒烟脚本会真实走一遍业务主线，全部通过才返回 0（已接入 CI）：
+
+| 检查项 | 期望 |
+|---|---|
+| 健康检查 §/actuator/health§ | 200 / status=UP |
+| 创建订单 | 201 + 返回 orderNo |
+| **重复投递同一幂等键** | 返回**同一个** orderNo |
+| 缺少 Idempotency-Key | 400 |
+| 非法流转 CREATED→SHIPPED | 409 |
+| 合法流转 CREATED→PAID | 200 + status=PAID |
+| **20 并发共用同一幂等键** | 只产生 **1** 笔订单 |
+| 触发对账 | 200 + 含 diffs 明细 |
 ## API 示例
 
 ```bash

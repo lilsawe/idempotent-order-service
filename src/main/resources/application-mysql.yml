@@ -12,3 +12,8 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+management:
+  health:
+    redis:
+      enabled: true

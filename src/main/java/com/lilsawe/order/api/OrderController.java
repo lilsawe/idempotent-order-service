@@ -6,6 +6,8 @@ import com.lilsawe.order.api.dto.OrderResponse;
 import com.lilsawe.order.domain.OrderEntity;
 import com.lilsawe.order.domain.OrderStatus;
 import com.lilsawe.order.service.OrderService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +23,7 @@ import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/orders")
+@Tag(name = "订单", description = "下单（幂等）、查询、状态流转")
 public class OrderController {
 
     private final OrderService orderService;
@@ -34,6 +37,7 @@ public class OrderController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "创建订单（幂等）", description = "必须携带 Idempotency-Key 请求头；同一 key 重复调用只创建一笔订单并返回相同结果")
     public OrderResponse create(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
                                 @Valid @RequestBody CreateOrderRequest request) {
         OrderEntity order = orderService.create(idempotencyKey, request.amountCent());
@@ -41,11 +45,13 @@ public class OrderController {
     }
 
     @GetMapping("/{orderNo}")
+    @Operation(summary = "查询订单")
     public OrderResponse get(@PathVariable String orderNo) {
         return OrderResponse.from(orderService.getByOrderNo(orderNo));
     }
 
     @PostMapping("/{orderNo}/status")
+    @Operation(summary = "状态流转", description = "CREATED -> PAID -> SHIPPED；非法流转返回 409")
     public OrderResponse changeStatus(@PathVariable String orderNo,
                                       @Valid @RequestBody ChangeStatusRequest request) {
         OrderStatus next = OrderStatus.valueOf(request.status().trim().toUpperCase(Locale.ROOT));

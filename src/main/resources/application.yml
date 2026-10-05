@@ -17,3 +17,28 @@ spring:
 
 server:
   port: 8080
+
+# ---- API 文档（打开 /swagger-ui.html 即可直接试接口）----
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# ---- 健康检查与指标 ----
+management:
+  health:
+    redis:
+      enabled: false   # 默认用内存幂等存储，未启用 Redis 时不参与健康检查
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: idempotent-order-service
