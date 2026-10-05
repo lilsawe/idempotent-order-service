@@ -5,11 +5,11 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A minimal, production-shaped Spring Boot service demonstrating **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 21 tests + CI.
+> A compact, production-shaped Spring Boot service for **idempotent order creation**, an **order state machine**, and **two-way reconciliation** — 21 tests + CI.
 
 一个用 Spring Boot 写的**订单服务实践项目**，聚焦后端工程里最容易出事故的三件事：**接口幂等**、**状态流转**、**对账**。
 
-> 说明：这是个人实践项目（非生产系统），目的是把真实业务里反复用到的模式抽成可运行、可测试的最小实现。
+> 说明：这是个人实践项目（个人工程实践，非生产系统），目的是把真实业务里反复用到的模式抽成可运行、可测试的最小实现。
 
 ## 为什么做这个
 
@@ -75,10 +75,10 @@ redis profile 会把幂等键存储从内存切换成 Redis。
 
 ```bash
 # 创建订单（带幂等键）
-curl -i -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -H "Idempotency-Key: demo-key-001" -d "{\"amountCent\": 9900}"
+curl -i -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -H "Idempotency-Key: order-key-001" -d "{\"amountCent\": 9900}"
 
 # 用同一个幂等键再调一次：返回同一笔订单，不会重复创建
-curl -i -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -H "Idempotency-Key: demo-key-001" -d "{\"amountCent\": 9900}"
+curl -i -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -H "Idempotency-Key: order-key-001" -d "{\"amountCent\": 9900}"
 
 # 查询订单
 curl http://localhost:8080/api/orders/{orderNo}
@@ -99,14 +99,14 @@ mvn -B -ntp verify
 - OrderStateMachineTest：合法/非法状态流转、终态、幂等流转
 - OrderServiceIdempotencyTest：同 key 只落库一次、不同 key 不同订单、唯一索引兜底、参数校验
 - ReconcileServiceTest：四类差异分类、完全一致场景
-- OrderDemoApplicationTests：@SpringBootTest 端到端冒烟（真实 Spring 上下文 + H2）
+- OrderServiceApplicationTests：@SpringBootTest 端到端冒烟（真实 Spring 上下文 + H2）
 
 CI：GitHub Actions（Temurin JDK 17）执行 mvn -B -ntp verify。
 
 ## 项目结构
 
 ```text
-src/main/java/com/lilsawe/orderdemo
+src/main/java/com/lilsawe/order
 ├── api/                 # Controller、DTO、全局异常处理
 ├── domain/              # 实体、Repository、状态机
 ├── idempotency/         # 幂等键存储抽象 + Redis / 内存实现
@@ -171,16 +171,32 @@ CONCURRENCY=200 REQUESTS=2000 node benchmark/load-test.mjs
 
 > 这是**本机单实例 + 内存数据库**的数据，用于证明「幂等在并发下真的生效」，不代表生产容量。生产需要压到 MySQL/Redis 并用多副本验证。
 
-## 踩坑记录：并发下的「读未提交」问题
+## 踩坑记录：并发下的「可见性窗口」（真实 flake 定位过程）
 
-| 项 | 内容 |
-|---|---|
-| 现象 | 200 并发同 key 下单时，**未抢到幂等键的请求直接查库**，而赢家的事务尚未提交，查不到订单，抛 IllegalStateException |
-| 根因 | 幂等键是「先占位、后落库」，占位与提交之间存在窗口，并发请求在该窗口内查询会读不到数据 |
-| 修复 | 未抢到键的请求改为**有限次、带间隔的回查**（50 次 x 10 ms），命中即返回同一订单；超时才抛「处理中，请稍后重试」 |
-| 验证 | IdempotencyConcurrencyTest（200 线程 JUnit 测试）+ benchmark/load-test.mjs 场景 B |
-| 生产更优解 | 1) 等待 + 超时后返回 **202 Accepted**（语义更准）；2) 改为「直接 INSERT，唯一索引冲突后 SELECT」，避免轮询；3) 幂等结果写「处理中」占位并让调用方轮询查询接口 |
+**现象**：200 并发共用同一幂等键时，**偶发**（约每 10 次出现 1 次）：
 
+```text
+java.lang.IllegalStateException: 幂等键 CONCURRENT-KEY-1 已占用，但订单 OD2026... 不存在
+```
+
+**定位过程**：并发测试偶发失败 → 在测试里捕获并打印异常类型与消息（而不是只统计数量）→ 拿到堆栈 → 发现是**第二条路径**没处理：
+
+| 并发路径 | 修复前处理 | 结果 |
+|---|---|---|
+| ① 未抢到幂等键（`putIfAbsent` 返回 false） | 回查 | 已修复（第一版） |
+| ② **已读到键占位，但赢家事务尚未提交** | 直接查库 | ❌ **抛异常（漏掉的路径）** |
+
+**根因**：幂等键是「先占位、后落库」，占位与提交之间存在**可见性窗口**——此时键已存在，但订单行对其它事务不可见。两条路径都会踩到，必须统一处理。
+
+**修复**：两条路径统一走 `awaitExistingOrder`——**有限次、带间隔的回查**（50 次 x 10 ms）；命中即返回同一订单，超时才抛「处理中，请稍后重试」。同时删掉已无调用方的旧方法，避免死代码。
+
+**验证**：200 线程并发测试**连跑 10 次全绿**；压测脚本场景 B（200 并发 -> 1 笔订单）。
+
+**生产更优解**（面试可展开）：
+
+1. 等待超时后返回 **202 Accepted**（语义比 500 更准），让调用方轮询查询接口
+2. 改为「直接 INSERT，唯一索引冲突后 SELECT」——把并发控制交给数据库，避免应用层轮询
+3. 幂等键写入「处理中」占位状态，结果落库后再置为「已完成」，调用方据此区分两种状态
 ## 测试与覆盖率
 
 | 指标 | 数值 |
@@ -227,7 +243,7 @@ open target/site/jacoco/index.html    # 查看报告
 - **对账结果不落库**：只返回报告，没有 T+1 任务与差异工单流转
 - **无鉴权 / 限流**：未接入认证、风控与接口限流
 - **幂等键 TTL 固定 24h**，未按业务分级
-- **演示渠道网关**按本地订单造数据，仅用于展示对账输出
+- **模拟渠道网关**按本地订单造数据，用于展示对账输出
 
 ### 下一步（如果继续做）
 

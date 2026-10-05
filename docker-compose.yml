@@ -1,16 +1,16 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: order-demo-mysql
+    container_name: order-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: order_demo
+      MYSQL_DATABASE: order_db
     ports:
       - "3306:3306"
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
   redis:
     image: redis:7-alpine
-    container_name: order-demo-redis
+    container_name: order-redis
     ports:
       - "6379:6379"
