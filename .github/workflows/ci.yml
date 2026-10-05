@@ -35,3 +35,27 @@ jobs:
 
       - name: Verify the library can be installed and consumed
         run: mvn -B -ntp install -DskipTests
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose file
+        run: docker compose config -q
+
+      - name: Build image
+        run: docker build -t order-reliability-kit:ci .
+
+      - name: Smoke test the container (H2 profile, self-contained)
+        run: |
+          docker run -d --name kit-ci -p 8080:8080 order-reliability-kit:ci
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health || true)
+            if [ "$code" = "200" ]; then break; fi
+            sleep 2
+          done
+          docker logs kit-ci | tail -5
+          bash scripts/smoke.sh
+          docker rm -f kit-ci
